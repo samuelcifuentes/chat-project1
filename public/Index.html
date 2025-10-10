@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <title>Mensajes — Mock UI</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <!-- Fuente opcional para pixel-match -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="app">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="sb-header">
+        <h1>Mensajes</h1>
+
+        <!-- Botón + con menú -->
+        <div class="menu-wrap">
+          <button id="plusBtn" class="icon-btn">+</button>
+          <div id="plusMenu" class="menu hidden">
+            <button id="addUserBtn" class="menu-item">Nuevo chat (usuario)</button>
+            <button id="addGroupBtn" class="menu-item">Nuevo grupo</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="sb-search">
+        <svg class="i i-search" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M21 21l-4.3-4.3M10.5 18a7.5 7.5 0 1 1 0-15 7.5 7.5 0 0 1 0 15Z"
+                fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        <input id="searchInput" placeholder="Buscar chats..." />
+      </div>
+
+      <!-- Lista (arranca vacía) -->
+      <ul id="chatList" class="chat-list"></ul>
+
+      <!-- Estado vacío -->
+      <div id="emptyState" class="empty">
+        <div class="empty-icon">💬</div>
+        <div class="empty-title">No hay chats</div>
+        <div class="empty-sub">Crea un chat o grupo con el botón “+”</div>
+      </div>
+    </aside>
+
+    <!-- PANEL DE CHAT -->
+    <section class="chat">
+      <header class="chat-header">
+        <div class="ch-left">
+          <div class="avatar big">?</div>
+          <div class="ch-meta">
+            <div class="ch-name">Selecciona un chat</div>
+            <div class="ch-status">—</div>
+          </div>
+        </div>
+        <div class="ch-actions">
+          <button class="icon-btn ghost" title="Llamar" aria-label="call">
+            <svg class="i" viewBox="0 0 24 24">
+              <path d="M5 3l4 2-2 4c2 3 5 6 8 8l4-2 2 4-3 3c-7-2-13-8-15-15L5 3Z"
+                    fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="icon-btn ghost" title="Video" aria-label="video">
+            <svg class="i" viewBox="0 0 24 24">
+              <path d="M3 7h11a2 2 0 0 1 2 2v1l4-3v10l-4-3v1a2 2 0 0 1-2 2H3z"
+                    fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+          </button>
+          <button class="icon-btn ghost" title="Más" aria-label="more">
+            <svg class="i" viewBox="0 0 24 24">
+              <circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/>
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div id="messages" class="messages"></div>
+
+      <footer class="composer">
+        <button class="icon-btn ghost" title="Adjuntar">
+          <svg class="i" viewBox="0 0 24 24">
+            <path d="M21 12v5a6 6 0 0 1-6 6h0a6 6 0 0 1-6-6V7a4 4 0 1 1 8 0v9a2 2 0 1 1-4 0V8"
+                  fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+
+        <textarea id="msgInput" class="composer-input" rows="1" placeholder="Escribe un mensaje..."></textarea>
+
+        <button class="icon-btn ghost" title="Emoji">😊</button>
+        <button id="sendBtn" class="fab-mic" title="Enviar">
+          <svg class="i" viewBox="0 0 24 24">
+            <path d="M12 14a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v4a4 4 0 0 0 4 4Zm0 0v6m-5-5a5 5 0 0 0 10 0"
+                  fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </footer>
+    </section>
+  </div>
+
+  <!-- Menú contextual (clic derecho) -->
+  <div id="ctxMenu" class="ctx-menu hidden">
+    <button id="ctxAddMembers" class="ctx-item">Agregar personas…</button>
+    <button id="ctxDelete" class="ctx-item danger">Eliminar chat</button>
+  </div>
+
+  <!-- Modal miembros del grupo -->
+  <div id="backdrop" class="backdrop hidden"></div>
+  <div id="membersModal" class="modal hidden">
+    <div class="modal-header"><h3>Miembros del grupo</h3></div>
+    <div class="modal-content">
+      <div id="groupTitle" class="modal-subtitle"></div>
+
+      <div class="pillbox" id="pillbox"></div>
+
+      <div class="row">
+        <input id="memberInput" placeholder="Nombre de la persona…" />
+        <button id="addMemberBtn" class="btn">Añadir</button>
+      </div>
+
+      <div class="modal-actions">
+        <button id="closeMembers" class="btn">Cerrar</button>
+        <button id="saveMembers" class="btn primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
