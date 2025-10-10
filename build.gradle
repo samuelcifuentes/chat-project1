@@ -1,0 +1,33 @@
+plugins {
+    id 'com.github.node-gradle.node' version '7.0.2'
+}
+
+node {
+    version = '20.11.0' // versión estable de Node.js
+    download = true     // Gradle descargará Node automáticamente
+    npmWorkDir = file("${project.buildDir}/npm")
+    nodeModulesDir = file("${projectDir}")
+}
+
+tasks.register('npmInstall', com.github.gradle.node.npm.task.NpmTask) {
+    args = ['install']
+}
+
+tasks.register('start', com.github.gradle.node.npm.task.NpmTask) {
+    dependsOn npmInstall
+    args = ['start']
+}
+
+tasks.register('buildFrontend', com.github.gradle.node.npm.task.NpmTask) {
+    dependsOn npmInstall
+    args = ['run', 'build']
+}
+
+tasks.register('testFrontend', com.github.gradle.node.npm.task.NpmTask) {
+    dependsOn npmInstall
+    args = ['test']
+}
+
+tasks.register('cleanBuild', Delete) {
+    delete buildDir
+}

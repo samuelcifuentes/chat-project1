@@ -4,7 +4,6 @@
   <meta charset="utf-8" />
   <title>Mensajes — Mock UI</title>
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <!-- Fuente opcional para pixel-match -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
@@ -16,8 +15,6 @@
     <aside class="sidebar">
       <div class="sb-header">
         <h1>Mensajes</h1>
-
-        <!-- Botón + con menú -->
         <div class="menu-wrap">
           <button id="plusBtn" class="icon-btn">+</button>
           <div id="plusMenu" class="menu hidden">
@@ -35,10 +32,8 @@
         <input id="searchInput" placeholder="Buscar chats..." />
       </div>
 
-      <!-- Lista (arranca vacía) -->
       <ul id="chatList" class="chat-list"></ul>
 
-      <!-- Estado vacío -->
       <div id="emptyState" class="empty">
         <div class="empty-icon">💬</div>
         <div class="empty-title">No hay chats</div>
@@ -90,6 +85,13 @@
         <textarea id="msgInput" class="composer-input" rows="1" placeholder="Escribe un mensaje..."></textarea>
 
         <button class="icon-btn ghost" title="Emoji">😊</button>
+
+        <!-- 🎤 INICIO: Botón de voz -->
+        <button id="micBtn" class="icon-btn" title="Grabar nota de voz">
+          🎤
+        </button>
+        <!-- 🎤 FIN -->
+        
         <button id="sendBtn" class="fab-mic" title="Enviar">
           <svg class="i" viewBox="0 0 24 24">
             <path d="M12 14a4 4 0 0 0 4-4V6a4 4 0 0 0-8 0v4a4 4 0 0 0 4 4Zm0 0v6m-5-5a5 5 0 0 0 10 0"
@@ -100,26 +102,21 @@
     </section>
   </div>
 
-  <!-- Menú contextual (clic derecho) -->
   <div id="ctxMenu" class="ctx-menu hidden">
     <button id="ctxAddMembers" class="ctx-item">Agregar personas…</button>
     <button id="ctxDelete" class="ctx-item danger">Eliminar chat</button>
   </div>
 
-  <!-- Modal miembros del grupo -->
   <div id="backdrop" class="backdrop hidden"></div>
   <div id="membersModal" class="modal hidden">
     <div class="modal-header"><h3>Miembros del grupo</h3></div>
     <div class="modal-content">
       <div id="groupTitle" class="modal-subtitle"></div>
-
       <div class="pillbox" id="pillbox"></div>
-
       <div class="row">
         <input id="memberInput" placeholder="Nombre de la persona…" />
         <button id="addMemberBtn" class="btn">Añadir</button>
       </div>
-
       <div class="modal-actions">
         <button id="closeMembers" class="btn">Cerrar</button>
         <button id="saveMembers" class="btn primary">Guardar</button>

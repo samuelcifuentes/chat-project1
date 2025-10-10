@@ -1,4 +1,4 @@
-// ====== Boot logs muy tempranos ======
+
 console.log('[BOOT] Starting chat server bootstrap...');
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] uncaughtException:', err);
@@ -23,13 +23,11 @@ console.log('[BOOT] Modules loaded OK');
 const app = express();
 app.use(cors());
 
-// Rutas y carpetas
 const publicDir = path.join(__dirname, 'public');
 const dataDir = path.join(__dirname, 'data');
 const audioDir = path.join(dataDir, 'audio');
 const messagesFile = path.join(dataDir, 'messages.json');
 
-// Asegura estructura de persistencia
 try {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
@@ -40,10 +38,8 @@ try {
   process.exit(1);
 }
 
-// Archivos estáticos del frontend
 app.use(express.static(publicDir));
 
-// (Opcional) endpoint de carga via multipart
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, audioDir),
   filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
@@ -54,17 +50,27 @@ app.post('/upload-audio', upload.single('audio'), (req, res) => {
   res.json({ ok: true, file: req.file.filename });
 });
 
-// Servir audios guardados
 app.use('/data/audio', express.static(audioDir));
 
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// Estado en memoria
-const clients = new Map();      // id -> { id, name, ws }
-const groups = {};              // gid -> { id, name, members: [] }
+const clients = new Map(); 
+const groups = {}; 
 
-// Utilidades
+const botResponses = [
+  "Mmm, interesante 🎧",
+  "Genial, suena bien 😄",
+  "Esa voz me inspira confianza 😎",
+  "¡Qué buena nota de voz! 🎵",
+  "No entendí mucho, pero suena cool 😅",
+  "Buen ritmo 😏",
+  "Esa nota me motivó 🔥",
+  "Me gusta tu energía 😌",
+  "Wow, eso sí que fue intenso 🎤",
+  "Creo que podrías ser cantante 😜"
+];
+
 function send(ws, type, payload) {
   try {
     ws.send(JSON.stringify({ type, payload }));
@@ -76,7 +82,11 @@ function send(ws, type, payload) {
 function broadcastAll(type, payload) {
   const obj = JSON.stringify({ type, payload });
   for (const c of clients.values()) {
-    if (c.ws.readyState === WebSocket.OPEN) c.ws.send(obj);
+    try {
+      if (c.ws.readyState === WebSocket.OPEN) c.ws.send(obj);
+    } catch (e) {
+      console.error('[WS] broadcast error to client', c.id, e);
+    }
   }
 }
 
@@ -97,7 +107,6 @@ wss.on('connection', (ws) => {
 
   console.log(`[WS] Client connected: ${clientName} (${clientId})`);
 
-  // Enviar estado inicial
   send(ws, 'welcome', {
     id: clientId,
     name: clientName,
@@ -106,7 +115,6 @@ wss.on('connection', (ws) => {
     history: JSON.parse(fs.readFileSync(messagesFile, 'utf8'))
   });
 
-  // Notificar a todos la lista de usuarios
   broadcastAll('clients_update', Array.from(clients.values()).map(c => ({ id: c.id, name: c.name })));
 
   ws.on('message', (raw) => {
@@ -144,7 +152,7 @@ wss.on('connection', (ws) => {
         from: clientId,
         fromName: clients.get(clientId)?.name || 'Unknown',
         to: payload.to,
-        toType: payload.toType, // 'user' | 'group'
+        toType: payload.toType,
         text: String(payload.text),
         ts: Date.now(),
         kind: 'text'
@@ -170,17 +178,23 @@ wss.on('connection', (ws) => {
     if (type === 'voice_note') {
       if (!payload?.to || !payload?.toType || !payload?.blobBase64) return;
 
+      console.log('[AUDIO] Recibiendo nota de voz...');
+
       const id = uuidv4();
-      const raw = payload.blobBase64;
-      const m = raw.match(/^data:(audio\/[a-z0-9.+-]+);base64,(.*)$/i);
+      const raw = String(payload.blobBase64).trim();
+      const match = raw.match(/^data:(audio\/[a-z0-9.+-]+);base64,(.*)$/i);
+
       let mime = 'audio/webm';
       let b64 = raw;
-      if (m) { mime = m[1]; b64 = m[2]; }
+      if (match) { mime = match[1]; b64 = match[2]; }
+
       const ext = mime.includes('webm') ? 'webm' : (mime.includes('wav') ? 'wav' : 'ogg');
       const filename = `${Date.now()}-${id}.${ext}`;
+      const filePath = path.join(audioDir, filename);
 
       try {
-        fs.writeFileSync(path.join(audioDir, filename), Buffer.from(b64, 'base64'));
+        fs.writeFileSync(filePath, Buffer.from(b64, 'base64'));
+        console.log(`[AUDIO] Guardado: ${filename}`);
       } catch (e) {
         console.error('[IO] Error writing audio file:', e);
         return;
@@ -211,6 +225,35 @@ wss.on('connection', (ws) => {
           });
         }
       }
+
+      setTimeout(() => {
+        const randomText = botResponses[Math.floor(Math.random() * botResponses.length)];
+        const botMsg = {
+          id: uuidv4(),
+          from: 'bot',
+          fromName: 'Bot 🤖',
+          to: payload.to,
+          toType: payload.toType,
+          text: randomText,
+          ts: Date.now(),
+          kind: 'text'
+        };
+        saveMessage(botMsg);
+
+        if (botMsg.toType === 'user') {
+          const t = clients.get(message.to);
+          if (t?.ws?.readyState === WebSocket.OPEN) send(t.ws, 'incoming_text', botMsg);
+        } else {
+          const g = groups[payload.to];
+          if (g) {
+            g.members.forEach(id => {
+              const c = clients.get(id);
+              if (c?.ws?.readyState === WebSocket.OPEN) send(c.ws, 'incoming_text', botMsg);
+            });
+          }
+        }
+      }, 1500); 
+
       return;
     }
 
@@ -253,7 +296,6 @@ wss.on('connection', (ws) => {
   });
 });
 
-// Errores del servidor
 server.on('error', (err) => {
   console.error('[HTTP] Server error:', err);
   process.exit(1);
