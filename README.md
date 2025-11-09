@@ -6,14 +6,7 @@ This project is a chat system that has been transitioned from a TCP-based archit
 2. **Node.js/Express HTTP Proxy** - Translates HTTP requests from the client into TCP messages for the backend
 3. **Web Client** - HTML/CSS/JavaScript client that communicates via HTTP
 
-## 🏗️ Architecture Overview
 
-```
-┌─────────────┐         HTTP          ┌──────────────┐         TCP          ┌─────────────┐
-│   Browser   │ ◄──────────────────► │ HTTP Proxy   │ ◄──────────────────► │ Java Server │
-│   Client    │   (REST API)         │  (Express)   │   (JSON over TCP)   │  (TCP:8888)  │
-└─────────────┘                       └──────────────┘                       └─────────────┘
-```
 
 ### Communication Flow
 
@@ -22,7 +15,7 @@ This project is a chat system that has been transitioned from a TCP-based archit
 3. **Backend → Proxy**: The Java backend processes requests and sends JSON responses over TCP
 4. **Proxy → Client**: The proxy translates TCP responses back to HTTP responses and returns them to the client
 
-## 📦 Components
+## Components
 
 ### Java Backend Server (`src/main/java/com/chat/server/`)
 
@@ -64,7 +57,7 @@ This project is a chat system that has been transitioned from a TCP-based archit
 - View message history
 - Modern, responsive UI
 
-## 🚀 Setup and Execution
+## Setup and Execution
 
 ### Prerequisites
 
@@ -85,13 +78,11 @@ Java dependencies are managed by Gradle and will be downloaded automatically whe
 ### Step 2: Build Java Backend
 
 ```bash
-# Build the Java project (Linux/Mac)
-./gradlew build
 
-# On Windows (Command Prompt):
+# In Windows :
 gradlew.bat build
 
-# On Windows (PowerShell):
+# In Windows :
 .\gradlew.bat build
 ```
 
@@ -102,13 +93,13 @@ gradlew.bat build
 In one terminal:
 
 ```bash
-# Run the Java server (Linux/Mac)
-./gradlew runServer
 
-# On Windows (Command Prompt):
+
+
+# In Windows 
 gradlew.bat runServer
 
-# On Windows (PowerShell):
+# in Windows 
 .\gradlew.bat runServer
 ```
 
@@ -123,10 +114,8 @@ The Java server will start on **port 8888**. You should see:
 In another terminal:
 
 ```bash
-# Start the proxy server
 npm start
 
-# Or:
 node server.js
 ```
 
@@ -145,7 +134,7 @@ http://localhost:3000
 
 The chat interface should load and automatically initialize a session.
 
-## 🎯 Usage
+## Usage
 
 ### Creating a Group
 
@@ -167,7 +156,7 @@ The chat interface should load and automatically initialize a session.
 2. The message history will automatically load and display
 3. Messages are sorted by timestamp
 
-## 📡 API Documentation
+##  API Documentation
 
 ### Initialize Session
 
@@ -271,7 +260,7 @@ Response:
 }
 ```
 
-## 🔧 Configuration
+##  Configuration
 
 ### Environment Variables
 
@@ -284,7 +273,7 @@ Response:
 - Port is hardcoded to 8888 in `ChatServer.java`
 - Data directory: `data/` (relative to project root)
 
-## 📁 Project Structure
+##  Project Structure
 
 ```
 chat-project1/
@@ -314,7 +303,7 @@ chat-project1/
 └── README.md
 ```
 
-## ⚠️ Known Limitations
+## Known Limitations
 
 1. **No Real-time Updates**: Messages are not pushed to clients in real-time. Clients must refresh or manually load history to see new messages.
 
@@ -334,7 +323,7 @@ chat-project1/
 - Message pagination for large histories
 - File upload support
 
-## 🧪 Testing
+## Testing
 
 ### Manual Testing
 
@@ -362,10 +351,10 @@ chat-project1/
 - Check browser console for errors
 - Verify CORS settings in `server.js`
 
-## 👥 Team Members
+## Team Members
 
 (Add your team member names here)
 
-## 📝 License
+##  License
 
 This project is part of an academic assignment for "Computación en Internet 1".
