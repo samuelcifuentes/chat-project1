@@ -1,4 +1,3 @@
-
 const chatList     = document.getElementById('chatList');
 const emptyState   = document.getElementById('emptyState');
 const searchInput  = document.getElementById('searchInput');
@@ -22,18 +21,105 @@ const msgInput     = document.getElementById('msgInput');
 const sendBtn      = document.getElementById('sendBtn');
 const micBtn       = document.getElementById('micBtn');
 
-let items = [];
+const API_BASE = window.location.origin;
+let sessionId = null;
+let clientId = null;
+let clientName = null;
+
+let items = []; 
 let activeId = null;
 let ctxTargetId = null;
 let stagingMembers = [];
+
+async function initSession() {
+  try {
+    sessionId = localStorage.getItem('sessionId');
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem('sessionId', sessionId);
+    }
+
+    const response = await fetch(`${API_BASE}/api/init`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId })
+    });
+
+    const data = await response.json();
+    if (data.ok) {
+      clientId = data.clientId;
+      clientName = data.clientName;
+      console.log('[CLIENT] Session initialized:', clientId);
+    } else {
+      console.error('[CLIENT] Failed to initialize session:', data.error);
+      alert('Failed to initialize session: ' + data.error);
+    }
+  } catch (error) {
+    console.error('[CLIENT] Error initializing session:', error);
+    alert('Error connecting to server: ' + error.message);
+  }
+}
+
+async function createGroup(name, members = []) {
+  try {
+    const response = await fetch(`${API_BASE}/api/groups`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, name, members })
+    });
+    const data = await response.json();
+    if (data.ok) {
+      return data.group;
+    } else {
+      throw new Error(data.error || 'Failed to create group');
+    }
+  } catch (error) {
+    console.error('[CLIENT] Error creating group:', error);
+    throw error;
+  }
+}
+
+async function sendMessage(to, toType, text) {
+  try {
+    const response = await fetch(`${API_BASE}/api/messages`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId, to, toType, text })
+    });
+    const data = await response.json();
+    if (data.ok) {
+      return data.message;
+    } else {
+      throw new Error(data.error || 'Failed to send message');
+    }
+  } catch (error) {
+    console.error('[CLIENT] Error sending message:', error);
+    throw error;
+  }
+}
+
+async function getHistory(targetId, targetType) {
+  try {
+    const response = await fetch(`${API_BASE}/api/history?sessionId=${sessionId}&targetId=${targetId}&targetType=${targetType}`);
+    const data = await response.json();
+    if (data.ok) {
+      return data.messages || [];
+    } else {
+      throw new Error(data.error || 'Failed to get history');
+    }
+  } catch (error) {
+    console.error('[CLIENT] Error getting history:', error);
+    return [];
+  }
+}
 
 function uid(){ return Math.random().toString(36).slice(2,10); }
 function initials(name){
   const p = String(name||'').trim().split(/\s+/);
   return ((p[0]?.[0]||'')+(p[1]?.[0]||'')).toUpperCase() || '??';
 }
-function nowStr(){
-  const d = new Date();
+function formatDate(ts){
+  const d = new Date(ts);
   return d.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 }
 function formatMembersLine(members){
@@ -53,7 +139,7 @@ function setHeader(item){
   }
   nameEl.textContent = item.name;
   if (item.type === 'group'){
-    statusEl.textContent = formatMembersLine(item.members);
+    statusEl.textContent = formatMembersLine(item.members || []);
   } else {
     statusEl.textContent = 'En línea';
   }
@@ -76,20 +162,25 @@ function renderList(){
     const right = document.createElement('div'); right.className='ci-right';
     const time = document.createElement('span'); time.className='ci-time';
     const last = lastMsg(item);
-    time.textContent = last?.time || '';
+    time.textContent = last ? formatDate(last.ts) : '';
     right.appendChild(time);
     r1.appendChild(name); r1.appendChild(right);
     const r2 = document.createElement('div'); r2.className='ci-row';
     const preview = document.createElement('div'); preview.className='ci-preview';
-    if (last?.type === 'voice') {
+    if (last?.kind === 'audio') {
       preview.textContent = '🎤 Nota de voz';
     } else {
-      preview.textContent = last?.text || (item.type==='group' ? formatMembersLine(item.members) : '');
+      preview.textContent = last?.text || (item.type==='group' ? formatMembersLine(item.members || []) : '');
     }
     r2.appendChild(preview);
     main.appendChild(r1); main.appendChild(r2);
     li.appendChild(av); li.appendChild(main);
-    li.onclick = ()=>{ activeId=item.id; setHeader(item); renderMessages(item); renderList(); };
+    li.onclick = async ()=>{ 
+      activeId=item.id; 
+      setHeader(item); 
+      await loadAndRenderMessages(item); 
+      renderList(); 
+    };
     li.addEventListener('contextmenu',(e)=>{
       e.preventDefault();
       ctxTargetId=item.id;
@@ -108,15 +199,42 @@ function lastMsg(item){
   return a.length ? a[a.length-1] : null;
 }
 
+async function loadAndRenderMessages(item){
+  if (!item) return;
+  
+  // Load history from backend
+  try {
+    const messages = await getHistory(item.id, item.type);
+    // Convert backend messages to local format
+    item.msgs = messages.map(msg => ({
+      id: msg.id,
+      from: msg.from === clientId ? 'me' : (msg.fromName || 'other'),
+      text: msg.text || '',
+      audioFile: msg.audioFile,
+      time: formatDate(msg.ts),
+      ts: msg.ts,
+      kind: msg.kind || 'text',
+      type: msg.kind === 'audio' ? 'voice' : 'text'
+    }));
+  } catch (error) {
+    console.error('[CLIENT] Error loading messages:', error);
+    item.msgs = item.msgs || [];
+  }
+  
+  renderMessages(item);
+}
+
 function renderMessages(item){
   messagesDiv.innerHTML='';
   (item.msgs||[]).forEach(m=>{
     const b=document.createElement('div');
     b.className='bubble '+(m.from==='me'?'me':'other');
-    if(m.type==='voice'){
+    if(m.kind==='audio' || m.type==='voice'){
       const a=document.createElement('audio');
       a.controls=true;
-      a.src=m.audioURL;
+      if (m.audioFile) {
+        a.src = m.audioFile.startsWith('http') ? m.audioFile : `${API_BASE}${m.audioFile}`;
+      }
       a.style.maxWidth='320px';
       b.appendChild(a);
     }else{
@@ -126,166 +244,73 @@ function renderMessages(item){
     }
     const t=document.createElement('div');
     t.className='b-time';
-    t.textContent=m.time;
+    t.textContent=m.time || formatDate(m.ts);
     b.appendChild(t);
     messagesDiv.appendChild(b);
   });
   messagesDiv.scrollTop=messagesDiv.scrollHeight;
 }
 
-function normalizeText(s){
-  return String(s||'').toLowerCase()
-    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
-    .replace(/[¡!¿?.,:;()/\\[\]{}<>"'`~^|]/g,' ')
-    .replace(/\s+/g,' ')
-    .trim();
-}
-
-function makeBotReply(item, userText){
-  const txt = normalizeText(userText);
-
-  if (txt.includes('chao')) return 'dale chao';
-  if (txt.includes('como estas')) return 'hola, ¿bien y tú?';
-  if (txt.includes('bien gracias')) return 'y qué haces?';
-  if (txt.includes('nada')) return 'yo nada, ¿quieres hacer algo?';
-  if (txt.includes('hagamos algo')) return ['¿quieres ir a comer?','¿quieres ir al cine?','¿quieres ir al parque?'][Math.floor(Math.random()*3)];
-  if (txt.includes('comer')) return 'Qué vamos a comer o qué';
-  if (['hamburguesa','pizza','salchipapa','perro'].some(k=>txt.includes(k))) return 'de una, entonces ya nos vemos';
-  if (txt.includes('tomar')) return 'Hágale, ¿qué nos tomamos o qué?';
-  if (['cerveza','coctel','guaro'].some(k=>txt.includes(k))) return 'uf si pega, me alisto y te llego o qué';
-  if (txt.includes('cine')) return 'Nah, que pereza, hagamos otra cosa';
-  if (txt.includes('hagale')) return 'listo, ya te llego';
-
-  if (txt.includes('que haces')) {
-    const opciones = [
-      'Nada, aquí chill. ¿Y tú qué haces?',
-      'Estoy viendo algo en Netflix 😴',
-      'Escuchando música, relax 😌',
-      'Nada interesante, solo descansando',
-      'Tratando de no pensar en el trabajo 😂'
-    ];
-    return opciones[Math.floor(Math.random()*opciones.length)];
-  }
-
-  if (txt.includes('quieres hacer algo') || txt.includes('hacemos algo hoy') || txt.includes('salir')) {
-    const opciones = [
-      'De una, ¿qué tienes en mente?',
-      'Claro, hace rato no salimos 😄',
-      'Sí, invítame algo 😏',
-      'Mmm podríamos ir al parque o comer algo',
-      'Sí, me parece buena idea 👌'
-    ];
-    return opciones[Math.floor(Math.random()*opciones.length)];
-  }
-
-  if (txt.includes('te gusta')) {
-    const opciones = [
-      'Depende de qué me hables 😅',
-      'Puede ser... cuéntame más 👀',
-      'Sí, bastante 😄',
-      'Mmm no mucho la verdad 🤔'
-    ];
-    return opciones[Math.floor(Math.random()*opciones.length)];
-  }
-
-  if (txt.includes('gracias')) {
-    return ['De nada 😄','Con gusto ✨','Para eso estamos 🙌'][Math.floor(Math.random()*3)];
-  }
-
-  if (txt.includes('hola')) {
-    return ['¡Hola! 😄','Holaa 👋','¿Qué tal?','Buenas 😎'][Math.floor(Math.random()*4)];
-  }
-
-  return ['ok','mmm interesante 🤔','vale','dale 👍'][Math.floor(Math.random()*4)];
-}
-
-function sendMessage(){
+async function sendMessageHandler(){
   if (!activeId) return;
   const item = items.find(x=>x.id===activeId);
   if (!item) return;
   const text = msgInput.value.trim();
   if (!text) return;
 
-  const m = { from:'me', text, time:nowStr() };
-  if(!item.msgs) item.msgs=[];
-  item.msgs.push(m);
-  msgInput.value='';
-  renderMessages(item); renderList();
-
-  setTimeout(()=>{
-    const replyText = makeBotReply(item, m.text);
-    const r = { from:'bot', text:replyText, time:nowStr() };
-    item.msgs.push(r);
-    if(item.id===activeId) renderMessages(item);
+  try {
+    // Send message via API
+    const message = await sendMessage(item.id, item.type, text);
+    
+    // Add to local state
+    if(!item.msgs) item.msgs=[];
+    item.msgs.push({
+      id: message.id,
+      from: 'me',
+      text: message.text,
+      time: formatDate(message.ts),
+      ts: message.ts,
+      kind: 'text',
+      type: 'text'
+    });
+    
+    msgInput.value='';
+    renderMessages(item); 
     renderList();
-  }, 400 + Math.random()*400);
+  } catch (error) {
+    console.error('[CLIENT] Error sending message:', error);
+    alert('Error sending message: ' + error.message);
+  }
 }
 
+// Voice recorder (disabled for now - will be implemented with WebSockets later)
 function VoiceRecorder(onStopCallback){
   this.mediaRecorder=null;
   this.chunks=[];
   this.onStopCallback=onStopCallback;
 }
 VoiceRecorder.prototype.start=async function(){
-  try{
-    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
-    this.mediaRecorder=new MediaRecorder(stream);
-    this.chunks=[];
-    this.mediaRecorder.ondataavailable=(e)=>{if(e.data.size>0)this.chunks.push(e.data)};
-    this.mediaRecorder.onstop=()=>{
-      const blob=new Blob(this.chunks,{type:'audio/webm'});
-      this.chunks=[];
-      if(typeof this.onStopCallback==='function')this.onStopCallback(blob);
-      stream.getTracks().forEach(t=>t.stop());
-    };
-    this.mediaRecorder.start();
-  }catch(err){alert('No se pudo acceder al micrófono');}
+  alert('Voice notes will be implemented with WebSockets in a future version');
 };
-VoiceRecorder.prototype.stop=function(){
-  if(this.mediaRecorder&&this.mediaRecorder.state==='recording'){this.mediaRecorder.stop();}
-};
+VoiceRecorder.prototype.stop=function(){};
 
 const voiceRecorder=new VoiceRecorder(function(blob){
-  if(!activeId)return;
-  const item=items.find(x=>x.id===activeId);
-  const audioURL=URL.createObjectURL(blob);
-  const msg={from:'me',type:'voice',audio:blob,audioURL,time:nowStr()};
-  if(!item.msgs)item.msgs=[];
-  item.msgs.push(msg);
-  renderMessages(item); renderList();
-
-  setTimeout(()=>{
-    const respuestas=['Mmm interesante 😄','Genial 👌','Te escuché, suena bien 🎧','Vale, entendido 😉'];
-    const r={from:'bot',text:respuestas[Math.floor(Math.random()*respuestas.length)],time:nowStr()};
-    item.msgs.push(r);
-    if(item.id===activeId)renderMessages(item);
-    renderList();
-  },1000);
 });
 
 let isRecording=false;
 micBtn.addEventListener('click',async()=>{
-  if(!isRecording){
-    isRecording=true;
-    micBtn.classList.add('recording');
-    await voiceRecorder.start();
-  }else{
-    isRecording=false;
-    micBtn.classList.remove('recording');
-    voiceRecorder.stop();
-  }
+  alert('Voice notes will be implemented with WebSockets in a future version');
 });
 
-// === UX ===
 function autoResize(el){
   el.style.height='auto';
   el.style.height=Math.min(el.scrollHeight,120)+'px';
 }
 msgInput.addEventListener('input',()=>autoResize(msgInput));
 msgInput.addEventListener('keydown',(e)=>{
-  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessageHandler();}
 });
-sendBtn.addEventListener('click',sendMessage);
+sendBtn.addEventListener('click',sendMessageHandler);
 
 plusBtn.addEventListener('click',()=>plusMenu.classList.toggle('hidden'));
 document.addEventListener('click',(e)=>{
@@ -293,40 +318,60 @@ document.addEventListener('click',(e)=>{
     plusMenu.classList.add('hidden'); ctxMenu.classList.add('hidden');
   }
 });
+
 addUserBtn.addEventListener('click',()=>{
-  const name=prompt('Nombre del nuevo chat:'); if(!name)return;
-  items.push({id:uid(),type:'user',name:name.trim(),msgs:[]});
-  plusMenu.classList.add('hidden'); renderList();
+  alert('Direct user chats are not implemented in this version. Please create a group instead.');
 });
-addGroupBtn.addEventListener('click',()=>{
-  const name=prompt('Nombre del nuevo grupo:'); if(!name)return;
-  items.push({id:uid(),type:'group',name:name.trim(),members:[],msgs:[]});
-  plusMenu.classList.add('hidden'); renderList();
+
+addGroupBtn.addEventListener('click',async()=>{
+  const name=prompt('Nombre del nuevo grupo:');
+  if(!name) return;
+  
+  try {
+    const group = await createGroup(name.trim());
+    // Add to local state
+    items.push({
+      id: group.id,
+      type: 'group',
+      name: group.name,
+      members: group.members || [],
+      msgs: []
+    });
+    plusMenu.classList.add('hidden');
+    renderList();
+  } catch (error) {
+    alert('Error creating group: ' + error.message);
+  }
 });
+
 ctxDelBtn.addEventListener('click',()=>{
   if(!ctxTargetId)return;
   const it=items.find(x=>x.id===ctxTargetId);
   if(!it)return;
-  const ok=confirm(`¿Eliminar "${it.name}"?`); if(!ok)return;
+  const ok=confirm(`¿Eliminar "${it.name}"?`);
+  if(!ok)return;
   items=items.filter(x=>x.id!==ctxTargetId);
   if(activeId===ctxTargetId){activeId=null;setHeader(null);messagesDiv.innerHTML='';}
   ctxTargetId=null; ctxMenu.classList.add('hidden'); renderList();
 });
+
 ctxAddBtn.addEventListener('click',()=>{
   if(!ctxTargetId)return;
-  const it=items.find(x=>x.id===ctxTargetId&&x.type==='group'); if(!it)return;
+  const it=items.find(x=>x.id===ctxTargetId&&x.type==='group');
+  if(!it)return;
   openMembersModal(it); ctxMenu.classList.add('hidden');
 });
 
 function openMembersModal(groupItem){
   groupTitle.textContent=groupItem.name;
-  stagingMembers=[...(groupItem.members||[])];
+  stagingMembers=[...(groupItem.members||[]).filter(m => m !== clientId)]; // Don't show clientId
   drawPills();
   backdrop.classList.remove('hidden');
   membersModal.classList.remove('hidden');
   setTimeout(()=>memberInput.focus(),20);
   saveMembers.onclick=()=>{
-    groupItem.members=[...new Set(stagingMembers.map(s=>s.trim()).filter(Boolean))];
+   
+    groupItem.members=[clientId, ...new Set(stagingMembers.map(s=>s.trim()).filter(Boolean))];
     if(activeId===groupItem.id)setHeader(groupItem);
     renderList(); closeMembersModal();
   };
@@ -339,7 +384,8 @@ function closeMembersModal(){
 closeMembers.addEventListener('click',closeMembersModal);
 backdrop.addEventListener('click',closeMembersModal);
 addMemberBtn.addEventListener('click',()=>{
-  const n=memberInput.value.trim(); if(!n)return;
+  const n=memberInput.value.trim();
+  if(!n)return;
   if(!stagingMembers.includes(n))stagingMembers.push(n);
   memberInput.value=''; memberInput.focus(); drawPills();
 });
@@ -363,6 +409,8 @@ function drawPills(){
   });
 }
 
-
-renderList();
-setHeader(null);
+// Initialize on page load
+initSession().then(() => {
+  renderList();
+  setHeader(null);
+});

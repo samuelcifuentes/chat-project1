@@ -1,5 +1,4 @@
-
-console.log('[BOOT] Starting chat server bootstrap...');
+console.log('[PROXY] Starting HTTP proxy server...');
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] uncaughtException:', err);
   process.exit(1);
@@ -11,297 +10,317 @@ process.on('unhandledRejection', (reason) => {
 
 const express = require('express');
 const http = require('http');
-const WebSocket = require('ws');
+const net = require('net');
 const fs = require('fs');
 const path = require('path');
-const multer = require('multer');
-const { v4: uuidv4 } = require('uuid');
 const cors = require('cors');
 
-console.log('[BOOT] Modules loaded OK');
+console.log('[PROXY] Modules loaded OK');
 
 const app = express();
 app.use(cors());
+app.use(express.json());
 
 const publicDir = path.join(__dirname, 'public');
 const dataDir = path.join(__dirname, 'data');
 const audioDir = path.join(dataDir, 'audio');
-const messagesFile = path.join(dataDir, 'messages.json');
 
 try {
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   if (!fs.existsSync(audioDir)) fs.mkdirSync(audioDir, { recursive: true });
-  if (!fs.existsSync(messagesFile)) fs.writeFileSync(messagesFile, JSON.stringify([]));
-  console.log('[BOOT] Data directories OK');
+  console.log('[PROXY] Data directories OK');
 } catch (e) {
-  console.error('[BOOT] Error creating data folders/files:', e);
+  console.error('[PROXY] Error creating data folders:', e);
   process.exit(1);
 }
 
 app.use(express.static(publicDir));
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, audioDir),
-  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`)
-});
-const upload = multer({ storage });
-app.post('/upload-audio', upload.single('audio'), (req, res) => {
-  if (!req.file) return res.status(400).json({ ok: false, error: 'No file' });
-  res.json({ ok: true, file: req.file.filename });
-});
-
 app.use('/data/audio', express.static(audioDir));
 
-const server = http.createServer(app);
-const wss = new WebSocket.Server({ server });
+const JAVA_BACKEND_HOST = process.env.JAVA_BACKEND_HOST || 'localhost';
+const JAVA_BACKEND_PORT = process.env.JAVA_BACKEND_PORT || 8888;
 
-const clients = new Map(); 
-const groups = {}; 
+const sessions = new Map();
 
-const botResponses = [
-  "Mmm, interesante 🎧",
-  "Genial, suena bien 😄",
-  "Esa voz me inspira confianza 😎",
-  "¡Qué buena nota de voz! 🎵",
-  "No entendí mucho, pero suena cool 😅",
-  "Buen ritmo 😏",
-  "Esa nota me motivó 🔥",
-  "Me gusta tu energía 😌",
-  "Wow, eso sí que fue intenso 🎤",
-  "Creo que podrías ser cantante 😜"
-];
 
-function send(ws, type, payload) {
-  try {
-    ws.send(JSON.stringify({ type, payload }));
-  } catch (e) {
-    console.error('[WS] send error:', e);
-  }
-}
+function sendTCPRequest(requestData, clientId = null) {
+  return new Promise((resolve, reject) => {
+    const client = new net.Socket();
+    let responseData = '';
+    let responseTimeout;
+    let responses = [];
 
-function broadcastAll(type, payload) {
-  const obj = JSON.stringify({ type, payload });
-  for (const c of clients.values()) {
-    try {
-      if (c.ws.readyState === WebSocket.OPEN) c.ws.send(obj);
-    } catch (e) {
-      console.error('[WS] broadcast error to client', c.id, e);
-    }
-  }
-}
+    client.setEncoding('utf8');
 
-function saveMessage(msg) {
-  try {
-    const arr = JSON.parse(fs.readFileSync(messagesFile, 'utf8'));
-    arr.push(msg);
-    fs.writeFileSync(messagesFile, JSON.stringify(arr, null, 2));
-  } catch (e) {
-    console.error('[IO] Error saving message:', e);
-  }
-}
-
-wss.on('connection', (ws) => {
-  const clientId = uuidv4();
-  const clientName = `User-${clientId.slice(0, 4)}`;
-  clients.set(clientId, { id: clientId, name: clientName, ws });
-
-  console.log(`[WS] Client connected: ${clientName} (${clientId})`);
-
-  send(ws, 'welcome', {
-    id: clientId,
-    name: clientName,
-    clients: Array.from(clients.values()).map(c => ({ id: c.id, name: c.name })),
-    groups: Object.values(groups),
-    history: JSON.parse(fs.readFileSync(messagesFile, 'utf8'))
-  });
-
-  broadcastAll('clients_update', Array.from(clients.values()).map(c => ({ id: c.id, name: c.name })));
-
-  ws.on('message', (raw) => {
-    let msg;
-    try { msg = JSON.parse(raw); }
-    catch (e) { console.error('[WS] Invalid JSON message:', e); return; }
-
-    const { type, payload } = msg || {};
-    if (!type) return;
-
-    if (type === 'set_name') {
-      const c = clients.get(clientId);
-      if (c && payload?.name) {
-        c.name = String(payload.name);
-        broadcastAll('clients_update', Array.from(clients.values()).map(x => ({ id: x.id, name: x.name })));
+    client.on('connect', () => {
+      console.log('[TCP] Connected to Java backend');
+      
+      if (clientId) {
+        requestData.clientId = clientId;
       }
-      return;
-    }
+      
+      client.write(JSON.stringify(requestData) + '\n');
+    });
 
-    if (type === 'create_group') {
-      const gid = uuidv4();
-      const name = (payload?.name || `Grupo-${gid.slice(0, 4)}`).toString();
-      const members = Array.isArray(payload?.members) && payload.members.length ? payload.members : [clientId];
-      groups[gid] = { id: gid, name, members };
-      console.log(`[GRP] Group created: ${name} (${gid}) members=${members.length}`);
-      broadcastAll('groups_update', Object.values(groups));
-      send(ws, 'group_created', groups[gid]);
-      return;
-    }
-
-    if (type === 'text_message') {
-      if (!payload?.to || !payload?.toType || !payload?.text) return;
-      const message = {
-        id: uuidv4(),
-        from: clientId,
-        fromName: clients.get(clientId)?.name || 'Unknown',
-        to: payload.to,
-        toType: payload.toType,
-        text: String(payload.text),
-        ts: Date.now(),
-        kind: 'text'
-      };
-      saveMessage(message);
-
-      if (message.toType === 'user') {
-        const t = clients.get(message.to);
-        if (t?.ws?.readyState === WebSocket.OPEN) send(t.ws, 'incoming_text', message);
-        send(ws, 'incoming_text', message);
-      } else {
-        const g = groups[message.to];
-        if (g) {
-          g.members.forEach(id => {
-            const c = clients.get(id);
-            if (c?.ws?.readyState === WebSocket.OPEN) send(c.ws, 'incoming_text', message);
-          });
-        }
-      }
-      return;
-    }
-
-    if (type === 'voice_note') {
-      if (!payload?.to || !payload?.toType || !payload?.blobBase64) return;
-
-      console.log('[AUDIO] Recibiendo nota de voz...');
-
-      const id = uuidv4();
-      const raw = String(payload.blobBase64).trim();
-      const match = raw.match(/^data:(audio\/[a-z0-9.+-]+);base64,(.*)$/i);
-
-      let mime = 'audio/webm';
-      let b64 = raw;
-      if (match) { mime = match[1]; b64 = match[2]; }
-
-      const ext = mime.includes('webm') ? 'webm' : (mime.includes('wav') ? 'wav' : 'ogg');
-      const filename = `${Date.now()}-${id}.${ext}`;
-      const filePath = path.join(audioDir, filename);
-
-      try {
-        fs.writeFileSync(filePath, Buffer.from(b64, 'base64'));
-        console.log(`[AUDIO] Guardado: ${filename}`);
-      } catch (e) {
-        console.error('[IO] Error writing audio file:', e);
-        return;
-      }
-
-      const message = {
-        id,
-        from: clientId,
-        fromName: clients.get(clientId)?.name || 'Unknown',
-        to: payload.to,
-        toType: payload.toType,
-        audioFile: `/data/audio/${filename}`,
-        ts: Date.now(),
-        kind: 'audio'
-      };
-      saveMessage(message);
-
-      if (message.toType === 'user') {
-        const t = clients.get(message.to);
-        if (t?.ws?.readyState === WebSocket.OPEN) send(t.ws, 'incoming_voice', message);
-        send(ws, 'incoming_voice', message);
-      } else {
-        const g = groups[message.to];
-        if (g) {
-          g.members.forEach(id => {
-            const c = clients.get(id);
-            if (c?.ws?.readyState === WebSocket.OPEN) send(c.ws, 'incoming_voice', message);
-          });
-        }
-      }
-
-      setTimeout(() => {
-        const randomText = botResponses[Math.floor(Math.random() * botResponses.length)];
-        const botMsg = {
-          id: uuidv4(),
-          from: 'bot',
-          fromName: 'Bot 🤖',
-          to: payload.to,
-          toType: payload.toType,
-          text: randomText,
-          ts: Date.now(),
-          kind: 'text'
-        };
-        saveMessage(botMsg);
-
-        if (botMsg.toType === 'user') {
-          const t = clients.get(message.to);
-          if (t?.ws?.readyState === WebSocket.OPEN) send(t.ws, 'incoming_text', botMsg);
-        } else {
-          const g = groups[payload.to];
-          if (g) {
-            g.members.forEach(id => {
-              const c = clients.get(id);
-              if (c?.ws?.readyState === WebSocket.OPEN) send(c.ws, 'incoming_text', botMsg);
-            });
+    client.on('data', (data) => {
+      responseData += data.toString();
+      const lines = responseData.split('\n');
+      responseData = lines.pop() || ''; // Keep incomplete line in buffer
+      
+      for (const line of lines) {
+        if (line.trim()) {
+          try {
+            const response = JSON.parse(line.trim());
+            responses.push(response);
+          } catch (e) {
+            console.error('[TCP] Error parsing response line:', e.message);
           }
         }
-      }, 1500); 
-
-      return;
-    }
-
-    if (type === 'signal') {
-      const to = payload?.to;
-      const data = payload?.data;
-      if (!to || !data) return;
-      const t = clients.get(to);
-      if (t?.ws?.readyState === WebSocket.OPEN) {
-        send(t.ws, 'signal', { from: clientId, fromName: clients.get(clientId)?.name, data });
       }
-      return;
-    }
-
-    if (type === 'update_group') {
-      const { groupId, members } = payload || {};
-      if (groups[groupId] && Array.isArray(members)) {
-        groups[groupId].members = members;
-        broadcastAll('groups_update', Object.values(groups));
+      
+      if (responses.length > 0) {
+        if (requestData.type === 'init') {
+          const welcomeResponse = responses.find(r => r.type === 'welcome');
+          if (welcomeResponse) {
+            clearTimeout(responseTimeout);
+            client.destroy();
+            resolve(welcomeResponse);
+          }
+        } else {
+          const actualResponse = responses.find(r => r.type !== 'welcome') || responses[responses.length - 1];
+          if (actualResponse && actualResponse.type !== 'welcome') {
+            clearTimeout(responseTimeout);
+            client.destroy();
+            resolve(actualResponse);
+          }
+        }
       }
-      return;
-    }
+    });
 
-    if (type === 'get_history') {
-      try {
-        const history = JSON.parse(fs.readFileSync(messagesFile, 'utf8'));
-        send(ws, 'history', history);
-      } catch (e) {
-        console.error('[IO] Error reading history:', e);
-        send(ws, 'history', []);
+    client.on('error', (err) => {
+      clearTimeout(responseTimeout);
+      console.error('[TCP] Connection error:', err.message);
+      reject(new Error('Failed to connect to Java backend: ' + err.message));
+    });
+
+    client.on('close', () => {
+      clearTimeout(responseTimeout);
+      if (responses.length > 0) {
+        if (requestData.type === 'init') {
+          const welcomeResponse = responses.find(r => r.type === 'welcome');
+          resolve(welcomeResponse || responses[responses.length - 1]);
+        } else {
+          const nonWelcome = responses.find(r => r.type !== 'welcome');
+          resolve(nonWelcome || responses[responses.length - 1]);
+        }
+      } else if (responseData.trim()) {
+        try {
+          const response = JSON.parse(responseData.trim());
+          resolve(response);
+        } catch (e) {
+          if (responses.length === 0) {
+            reject(new Error('Invalid response from backend'));
+          }
+        }
+      } else if (responses.length === 0) {
+        reject(new Error('No response from backend'));
       }
-      return;
-    }
+    });
+
+    responseTimeout = setTimeout(() => {
+      client.destroy();
+      if (responses.length > 0) {
+        const nonWelcome = responses.find(r => r.type !== 'welcome');
+        resolve(nonWelcome || responses[responses.length - 1]);
+      } else {
+        reject(new Error('Request timeout'));
+      }
+    }, 10000); 
+
+    client.connect(JAVA_BACKEND_PORT, JAVA_BACKEND_HOST, (err) => {
+      if (err) {
+        clearTimeout(responseTimeout);
+        reject(new Error('Failed to connect to Java backend: ' + err.message));
+      }
+    });
   });
+}
 
-  ws.on('close', () => {
-    clients.delete(clientId);
-    console.log(`[WS] Client disconnected: ${clientName} (${clientId})`);
-    broadcastAll('clients_update', Array.from(clients.values()).map(c => ({ id: c.id, name: c.name })));
-  });
+/**
+ * Get or create a client session
+ */
+function getOrCreateSession(sessionId) {
+  if (!sessions.has(sessionId)) {
+    sessions.set(sessionId, { sessionId });
+  }
+  return sessions.get(sessionId);
+}
+
+
+app.post('/api/init', async (req, res) => {
+  try {
+    const sessionId = req.body.sessionId || require('crypto').randomBytes(16).toString('hex');
+    const session = getOrCreateSession(sessionId);
+    
+    if (session.clientId) {
+      return res.json({
+        ok: true,
+        sessionId,
+        clientId: session.clientId,
+        clientName: session.clientName,
+        groups: [],
+        history: []
+      });
+    }
+    
+    const response = await sendTCPRequest({
+      type: 'init',
+      payload: {}
+    });
+    
+    if (response.type === 'welcome') {
+      session.clientId = response.payload.id;
+      session.clientName = response.payload.name;
+      res.json({
+        ok: true,
+        sessionId,
+        clientId: session.clientId,
+        clientName: session.clientName,
+        groups: [],
+        history: []
+      });
+    } else {
+      res.status(500).json({ ok: false, error: 'Unexpected response from backend' });
+    }
+  } catch (error) {
+    console.error('[PROXY] Error in /api/init:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
 });
 
+app.post('/api/groups', async (req, res) => {
+  try {
+    const { sessionId, name, members } = req.body;
+    if (!sessionId) {
+      return res.status(400).json({ ok: false, error: 'sessionId required' });
+    }
+    
+    const session = getOrCreateSession(sessionId);
+    if (!session.clientId) {
+      return res.status(400).json({ ok: false, error: 'Session not initialized. Call /api/init first' });
+    }
+
+    const response = await sendTCPRequest({
+      type: 'create_group',
+      payload: {
+        name: name || `Grupo-${Date.now()}`,
+        members: members || [session.clientId]
+      }
+    }, session.clientId);
+
+    if (response.type === 'group_created') {
+      res.json({
+        ok: true,
+        group: response.payload
+      });
+    } else if (response.type === 'error') {
+      res.status(400).json({ ok: false, error: response.payload.error });
+    } else {
+      res.status(500).json({ ok: false, error: 'Unexpected response from backend' });
+    }
+  } catch (error) {
+    console.error('[PROXY] Error in /api/groups:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.post('/api/messages', async (req, res) => {
+  try {
+    const { sessionId, to, toType, text } = req.body;
+    if (!sessionId || !to || !toType || !text) {
+      return res.status(400).json({ ok: false, error: 'Missing required fields: sessionId, to, toType, text' });
+    }
+    
+    const session = getOrCreateSession(sessionId);
+    if (!session.clientId) {
+      return res.status(400).json({ ok: false, error: 'Session not initialized. Call /api/init first' });
+    }
+
+    const response = await sendTCPRequest({
+      type: 'text_message',
+      payload: {
+        to,
+        toType,
+        text
+      }
+    }, session.clientId);
+
+    if (response.type === 'message_sent') {
+      res.json({
+        ok: true,
+        message: response.payload
+      });
+    } else if (response.type === 'error') {
+      res.status(400).json({ ok: false, error: response.payload.error });
+    } else {
+      res.status(500).json({ ok: false, error: 'Unexpected response from backend' });
+    }
+  } catch (error) {
+    console.error('[PROXY] Error in /api/messages:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get('/api/history', async (req, res) => {
+  try {
+    const { sessionId, targetId, targetType } = req.query;
+    if (!sessionId || !targetId || !targetType) {
+      return res.status(400).json({ ok: false, error: 'Missing required query parameters: sessionId, targetId, targetType' });
+    }
+    
+    const session = getOrCreateSession(sessionId);
+    if (!session.clientId) {
+      return res.status(400).json({ ok: false, error: 'Session not initialized. Call /api/init first' });
+    }
+
+    const response = await sendTCPRequest({
+      type: 'get_history',
+      payload: {
+        targetId,
+        targetType
+      }
+    }, session.clientId);
+
+    if (response.type === 'history') {
+      res.json({
+        ok: true,
+        messages: response.payload.messages || []
+      });
+    } else if (response.type === 'error') {
+      res.status(400).json({ ok: false, error: response.payload.error });
+    } else {
+      res.status(500).json({ ok: false, error: 'Unexpected response from backend' });
+    }
+  } catch (error) {
+    console.error('[PROXY] Error in /api/history:', error);
+    res.status(500).json({ ok: false, error: error.message });
+  }
+});
+
+app.get('/api/health', (req, res) => {
+  res.json({ ok: true, status: 'proxy running' });
+});
+
+const server = http.createServer(app);
+
 server.on('error', (err) => {
-  console.error('[HTTP] Server error:', err);
+  console.error('[PROXY] Server error:', err);
   process.exit(1);
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`[HTTP] Server listening on http://localhost:${PORT}`);
+  console.log(`[PROXY] HTTP proxy server listening on http://localhost:${PORT}`);
+  console.log(`[PROXY] Java backend expected at ${JAVA_BACKEND_HOST}:${JAVA_BACKEND_PORT}`);
+  console.log(`[PROXY] Make sure the Java backend is running before making requests`);
 });

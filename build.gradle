@@ -1,10 +1,29 @@
 plugins {
+    id 'java'
+    id 'application'
     id 'com.github.node-gradle.node' version '7.0.2'
 }
 
+java {
+    sourceCompatibility = JavaVersion.VERSION_11
+    targetCompatibility = JavaVersion.VERSION_11
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.json:json:20231013'
+}
+
+application {
+    mainClass = 'com.chat.server.ChatServer'
+}
+
 node {
-    version = '20.11.0' // versión estable de Node.js
-    download = true     // Gradle descargará Node automáticamente
+    version = '20.11.0'
+    download = true
     npmWorkDir = file("${project.buildDir}/npm")
     nodeModulesDir = file("${projectDir}")
 }
@@ -13,19 +32,15 @@ tasks.register('npmInstall', com.github.gradle.node.npm.task.NpmTask) {
     args = ['install']
 }
 
-tasks.register('start', com.github.gradle.node.npm.task.NpmTask) {
+tasks.register('startProxy', com.github.gradle.node.npm.task.NpmTask) {
     dependsOn npmInstall
     args = ['start']
 }
 
-tasks.register('buildFrontend', com.github.gradle.node.npm.task.NpmTask) {
-    dependsOn npmInstall
-    args = ['run', 'build']
-}
-
-tasks.register('testFrontend', com.github.gradle.node.npm.task.NpmTask) {
-    dependsOn npmInstall
-    args = ['test']
+tasks.register('runServer', JavaExec) {
+    dependsOn classes
+    classpath = sourceSets.main.runtimeClasspath
+    mainClass = 'com.chat.server.ChatServer'
 }
 
 tasks.register('cleanBuild', Delete) {
