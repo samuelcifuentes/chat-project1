@@ -95,6 +95,8 @@ gradlew.bat build
 .\gradlew.bat build
 ```
 
+**Note:** If you get an error about `gradle-wrapper.jar`, it may need to be downloaded. The first time you run Gradle, it will automatically download the required version (Gradle 6.9.4).
+
 ### Step 3: Start the Java Backend Server
 
 In one terminal:

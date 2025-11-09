@@ -1,12 +1,12 @@
 plugins {
     id 'java'
     id 'application'
-    id 'com.github.node-gradle.node' version '7.0.2'
+    id 'com.github.node-gradle.node' version '3.5.1'
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_11
-    targetCompatibility = JavaVersion.VERSION_11
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }
 
 repositories {
@@ -14,7 +14,7 @@ repositories {
 }
 
 dependencies {
-    implementation 'org.json:json:20231013'
+    implementation 'org.json:json:20190722'
 }
 
 application {
@@ -28,21 +28,14 @@ node {
     nodeModulesDir = file("${projectDir}")
 }
 
-tasks.register('npmInstall', com.github.gradle.node.npm.task.NpmTask) {
-    args = ['install']
-}
-
-tasks.register('startProxy', com.github.gradle.node.npm.task.NpmTask) {
-    dependsOn npmInstall
-    args = ['start']
-}
-
+// Task to run the Java server
 tasks.register('runServer', JavaExec) {
     dependsOn classes
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.chat.server.ChatServer'
 }
 
-tasks.register('cleanBuild', Delete) {
-    delete buildDir
+// Task to start the proxy (uses npm start)
+tasks.named('npm_start') {
+    dependsOn 'npmInstall'
 }
