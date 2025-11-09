@@ -28,14 +28,12 @@ node {
     nodeModulesDir = file("${projectDir}")
 }
 
-// Task to run the Java server
 tasks.register('runServer', JavaExec) {
     dependsOn classes
     classpath = sourceSets.main.runtimeClasspath
     mainClass = 'com.chat.server.ChatServer'
 }
 
-// Task to start the proxy (uses npm start)
 tasks.named('npm_start') {
     dependsOn 'npmInstall'
 }
