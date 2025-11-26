@@ -1,0 +1,101 @@
+import java.io.File
+import java.io.FileFilter
+import java.util.Locale
+
+plugins {
+    id 'java'
+    id 'application'
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'com.zeroc:ice:3.7.9'
+    implementation 'org.json:json:20231013'
+}
+
+def sliceOutput = "$buildDir/generated-src/ice"
+
+def detectIceHome() {
+    def fromEnv = System.getenv('ICE_HOME')
+    if (fromEnv) {
+        return fromEnv
+    }
+
+    def findInProgramFiles = { base ->
+        if (!base) {
+            return null
+        }
+        def zeroCDir = new File(base, "ZeroC")
+        if (!zeroCDir.exists()) {
+            return null
+        }
+        def matches = zeroCDir.listFiles(new FileFilter() {
+            @Override
+            boolean accept(File file) {
+                file.isDirectory() && file.name.toLowerCase(Locale.ROOT).startsWith("ice-")
+            }
+        })
+        if (!matches) {
+            return null
+        }
+        return matches.sort { a, b -> b.name <=> a.name }[0]?.absolutePath
+    }
+
+    def pf86 = System.getenv('ProgramFiles(x86)')
+    def pf = System.getenv('ProgramW6432')
+    return [findInProgramFiles(pf86), findInProgramFiles(pf)].find { it != null }
+}
+
+def iceHome = detectIceHome()
+if (!iceHome) {
+    logger.warn("ICE_HOME is not set and ZeroC Ice installation could not be auto-detected. slice2java may fail if standard includes are missing.")
+}
+
+def sliceInclude = iceHome ? "${iceHome}/slice" : null
+
+task compileSlice(type: Exec) {
+    inputs.file("server/src/main/slice/chat.ice")
+    outputs.dir(sliceOutput)
+    doFirst {
+        file(sliceOutput).mkdirs()
+    }
+    def cmd = ['slice2java']
+    if (sliceInclude) {
+        cmd += ['-I', sliceInclude]
+    }
+    cmd += ['--output-dir', sliceOutput, 'server/src/main/slice/chat.ice']
+    commandLine cmd
+}
+
+compileJava.dependsOn compileSlice
+
+sourceSets {
+    main {
+        java {
+            setSrcDirs(["server/src/main/java", sliceOutput])
+        }
+    }
+}
+
+application {
+    mainClass = 'com.chat.rpc.ChatServerApp'
+}
+
+tasks.register('runServer', JavaExec) {
+    dependsOn classes
+    mainClass = application.mainClass
+    classpath = sourceSets.main.runtimeClasspath
+    workingDir = projectDir
+    jvmArgs = [
+        "-DIce.Config=${projectDir}/server/config/ice.properties"
+    ]
+}
+

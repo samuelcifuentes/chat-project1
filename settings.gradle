@@ -1,2 +1,3 @@
-rootProject.name = 'chat-project1'
+rootProject.name = 'compu-internet-projects'
 
+include 'chat_rpc'

@@ -9,20 +9,23 @@ Sistema de chat migrado completamente a RPC utilizando ZeroC Ice, con servicios 
 ## 1. Árbol del proyecto
 
 ```
-chat-project1
-├── server/
-│   ├── config/ice.properties          # Configuración del adaptador Ice WebSocket
-│   ├── data/                          # Persistencia JSON + audios
-│   └── src/
-│       └── main/
-│           ├── java/com/chat/...      # Core, dominio y capa RPC
-│           └── slice/chat.ice         # Definición RPC
-├── web-client/                        # Cliente HTML/CSS/JS + Webpack
-│   ├── index.html
-│   ├── package.json / webpack.config.js
-│   ├── src/main.js / style.css
-│   └── public/ice/chat.js (generado con slice2js)
-├── build.gradle / settings.gradle
+compu-internet-projects
+├── chat_rpc/                          # Módulo de chat RPC con ZeroC Ice
+│   ├── server/
+│   │   ├── config/ice.properties      # Configuración del adaptador Ice WebSocket
+│   │   ├── data/                      # Persistencia JSON + audios
+│   │   └── src/
+│   │       └── main/
+│   │           ├── java/com/chat/...  # Core, dominio y capa RPC
+│   │           └── slice/chat.ice     # Definición RPC
+│   ├── web-client/                    # Cliente HTML/CSS/JS + Webpack
+│   │   ├── index.html
+│   │   ├── package.json / webpack.config.js
+│   │   ├── src/main.js / style.css
+│   │   └── public/ice/chat.js (generado con slice2js)
+│   └── build.gradle
+├── build.gradle                       # Build común
+├── settings.gradle                    # Configuración multi-módulo
 └── README.md
 ```
 
@@ -37,24 +40,26 @@ chat-project1
 
 ### 2.1 Compilar Slice para Java
 ```powershell
-.\gradlew.bat compileSlice
+cd chat_rpc
+..\gradlew.bat compileSlice
 ```
-Genera las *proxies* Java en `build/generated-src/ice`.
+Genera las *proxies* Java en `chat_rpc/build/generated-src/ice`.
 
 ### 2.2 Compilar y ejecutar el servidor Ice
 ```powershell
-.\gradlew.bat build
-.\gradlew.bat runServer
+cd chat_rpc
+..\gradlew.bat build
+..\gradlew.bat runServer
 ```
-El adaptador `ChatAdapter` queda escuchando WebSockets en `ws://localhost:10000` usando `server/config/ice.properties`.
+El adaptador `ChatAdapter` queda escuchando WebSockets en `ws://localhost:10000` usando `chat_rpc/server/config/ice.properties`.
 
 ### 2.3 Preparar el cliente Web
 ```powershell
-cd web-client
-slice2js --output-dir public/ice ../server/src/main/slice/chat.ice   # genera chat.js para el navegador
+cd chat_rpc\web-client
+slice2js --output-dir public/ice ..\server\src\main\slice\chat.ice   # genera chat.js para el navegador
 npm install
 npm run dev            # servidor de desarrollo con recarga
-# o npm run build para generar web-client/dist listo para producción
+# o npm run build para generar dist listo para producción
 ```
 El `index.html` carga `Ice.min.js` desde CDN y el archivo `ice/chat.js` generado. Webpack empaqueta `src/main.js` + `style.css` y copia los artefactos estáticos.
 
@@ -102,11 +107,11 @@ El `index.html` carga `Ice.min.js` desde CDN y el archivo `ice/chat.js` generado
 
 | Acción | Comando |
 |--------|---------|
-| Compilar backend | `.\gradlew.bat build` |
-| Ejecutar servidor Ice | `.\gradlew.bat runServer` |
-| Generar proxies JS | `cd web-client && slice2js --output-dir public/ice ../server/src/main/slice/chat.ice` |
-| Servir cliente | `cd web-client && npm run dev` |
-| Compilar bundle front | `cd web-client && npm run build` |
+| Compilar backend | `cd chat_rpc` luego `..\gradlew.bat build` |
+| Ejecutar servidor Ice | `cd chat_rpc` luego `..\gradlew.bat runServer` |
+| Generar proxies JS | `cd chat_rpc\web-client` luego `slice2js --output-dir public/ice ..\server\src\main\slice\chat.ice` |
+| Servir cliente | `cd chat_rpc\web-client` luego `npm run dev` |
+| Compilar bundle front | `cd chat_rpc\web-client` luego `npm run build` |
 
 ---
 

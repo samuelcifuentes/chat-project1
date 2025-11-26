@@ -1,0 +1,11 @@
+.gradle/
+build/
+**/build/
+**/node_modules/
+**/dist/
+.idea/
+*.iml
+*.log
+chat_rpc/server/data/
+chat_rpc/server/config/ice.properties
+
