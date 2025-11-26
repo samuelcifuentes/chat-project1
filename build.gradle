@@ -66,7 +66,7 @@ if (!iceHome) {
 def sliceInclude = iceHome ? "${iceHome}/slice" : null
 
 task compileSlice(type: Exec) {
-    inputs.file("src/main/slice/chat.ice")
+    inputs.file("server/src/main/slice/chat.ice")
     outputs.dir(sliceOutput)
     doFirst {
         file(sliceOutput).mkdirs()
@@ -75,12 +75,19 @@ task compileSlice(type: Exec) {
     if (sliceInclude) {
         cmd += ['-I', sliceInclude]
     }
-    cmd += ['--output-dir', sliceOutput, 'src/main/slice/chat.ice']
+    cmd += ['--output-dir', sliceOutput, 'server/src/main/slice/chat.ice']
     commandLine cmd
 }
 
 compileJava.dependsOn compileSlice
-sourceSets.main.java.srcDir sliceOutput
+
+sourceSets {
+    main {
+        java {
+            setSrcDirs(["server/src/main/java", sliceOutput])
+        }
+    }
+}
 
 application {
     mainClass = 'com.chat.rpc.ChatServerApp'
@@ -91,6 +98,6 @@ tasks.register('runServer', JavaExec) {
     mainClass = application.mainClass
     classpath = sourceSets.main.runtimeClasspath
     jvmArgs = [
-        "-DIce.Config=${projectDir}/config/ice.properties"
+        "-DIce.Config=${projectDir}/server/config/ice.properties"
     ]
 }

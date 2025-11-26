@@ -1,0 +1,23 @@
+{
+  "40d02118-b586-4c30-ac03-972fce9f6ecf": {
+    "members": [
+      "0243faf8-0c6f-4131-bcfc-b24a0701d8b0",
+      "de15b5ba-b7ea-44b4-9891-8ca45b7b0643"
+    ],
+    "name": "gatico",
+    "id": "40d02118-b586-4c30-ac03-972fce9f6ecf"
+  },
+  "b24a03c3-4f66-4769-892e-13cdf7d9538b": {
+    "members": ["9f59611d-d842-47c4-889c-f853417c01b8"],
+    "name": "lll",
+    "id": "b24a03c3-4f66-4769-892e-13cdf7d9538b"
+  },
+  "303086d9-7b69-4d73-8da8-1d6efffea801": {
+    "members": [
+      "cd9dbb92-9974-4315-aab2-59270563e348",
+      "de15b5ba-b7ea-44b4-9891-8ca45b7b0643"
+    ],
+    "name": "billetico",
+    "id": "303086d9-7b69-4d73-8da8-1d6efffea801"
+  }
+}

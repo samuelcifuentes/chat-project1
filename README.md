@@ -10,18 +10,18 @@ Sistema de chat migrado completamente a RPC utilizando ZeroC Ice, con servicios 
 
 ```
 chat-project1
-├── config/ice.properties              # Configuración del adaptador Ice WebSocket
-├── data/                              # Persistencia JSON + audios
-├── src/main/java/
-│   ├── com/chat/core/…                # Lógica de negocio y patrón delegado
-│   ├── com/chat/domain/…              # Entidades de dominio
-│   └── com/chat/rpc/…                 # Servants, DTOs y servidor Ice
-├── src/main/slice/chat.ice            # Definición RPC
-├── client/                            # Cliente HTML/CSS/JS + Webpack
+├── server/
+│   ├── config/ice.properties          # Configuración del adaptador Ice WebSocket
+│   ├── data/                          # Persistencia JSON + audios
+│   └── src/
+│       └── main/
+│           ├── java/com/chat/...      # Core, dominio y capa RPC
+│           └── slice/chat.ice         # Definición RPC
+├── web-client/                        # Cliente HTML/CSS/JS + Webpack
 │   ├── index.html
-│   ├── package.json
+│   ├── package.json / webpack.config.js
 │   ├── src/main.js / style.css
-│   └── public/ice/Chat.js (generado con slice2js)
+│   └── public/ice/chat.js (generado con slice2js)
 ├── build.gradle / settings.gradle
 └── README.md
 ```
@@ -46,22 +46,22 @@ Genera las *proxies* Java en `build/generated-src/ice`.
 .\gradlew.bat build
 .\gradlew.bat runServer
 ```
-El adaptador `ChatAdapter` queda escuchando WebSockets en `ws://localhost:10000` usando `config/ice.properties`.
+El adaptador `ChatAdapter` queda escuchando WebSockets en `ws://localhost:10000` usando `server/config/ice.properties`.
 
 ### 2.3 Preparar el cliente Web
 ```powershell
-cd client
-slice2js --output-dir public/ice ../src/main/slice/chat.ice   # genera Chat.js para el navegador
+cd web-client
+slice2js --output-dir public/ice ../server/src/main/slice/chat.ice   # genera chat.js para el navegador
 npm install
 npm run dev            # servidor de desarrollo con recarga
-# o npm run build para generar client/dist listo para producción
+# o npm run build para generar web-client/dist listo para producción
 ```
-El `index.html` carga `Ice.min.js` desde CDN y el archivo `ice/Chat.js` generado. Webpack empaqueta `src/main.js` + `style.css` y copia los artefactos estáticos.
+El `index.html` carga `Ice.min.js` desde CDN y el archivo `ice/chat.js` generado. Webpack empaqueta `src/main.js` + `style.css` y copia los artefactos estáticos.
 
 ### 2.4 Acceder al chat
 1. Mantén el servidor Java corriendo.
 2. Abre `http://localhost:5173` (o el puerto indicado por Webpack).
-3. Registra un usuario, crea grupos, envía textos o notas de voz en tiempo real.
+3. Registra un usuario, crea grupos, envía textos o notas de voz (grabadas o cargadas desde un archivo) en tiempo real.
 
 ---
 
@@ -90,7 +90,7 @@ El `index.html` carga `Ice.min.js` desde CDN y el archivo `ice/Chat.js` generado
 
 ## 5. Detalles de implementación
 
-- **Persistencia**: archivos JSON en `data/messages.json` y `data/groups.json`. Las notas de voz se guardan en disco (`data/audio`) y se serializan como `data URI` para consumo web inmediato.
+- **Persistencia**: archivos JSON en `server/data/messages.json` y `server/data/groups.json`. Las notas de voz se guardan en disco (`server/data/audio`) y se serializan como `data URI` para consumo web inmediato.
 - **Seguridad de tipos**: todos los DTOs (`UserInfoData`, `MessagePayloadData`, etc.) encapsulan la lógica de mapeo entre dominio y Slice.
 - **Front-end creativo**: interfaz minimalista con gradientes, tarjetas y notificaciones, todo escrito en HTML/CSS vanilla y empaquetado via Webpack + loaders de CSS.
 - **Notas de voz**: `MediaRecorder` captura audio, lo transforma a `Uint8Array` y lo envía mediante `sendAudio`. Los destinatarios reproducen el audio desde un `<audio>` con el data URI recibido.
@@ -104,9 +104,9 @@ El `index.html` carga `Ice.min.js` desde CDN y el archivo `ice/Chat.js` generado
 |--------|---------|
 | Compilar backend | `.\gradlew.bat build` |
 | Ejecutar servidor Ice | `.\gradlew.bat runServer` |
-| Generar proxies JS | `cd client && slice2js --output-dir public/ice ../src/main/slice/chat.ice` |
-| Servir cliente | `cd client && npm run dev` |
-| Compilar bundle front | `cd client && npm run build` |
+| Generar proxies JS | `cd web-client && slice2js --output-dir public/ice ../server/src/main/slice/chat.ice` |
+| Servir cliente | `cd web-client && npm run dev` |
+| Compilar bundle front | `cd web-client && npm run build` |
 
 ---
 
