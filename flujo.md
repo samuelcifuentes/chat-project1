@@ -63,5 +63,5 @@
 3. **Interacciones** (crear grupo, enviar texto/audio, llamadas) siguen las rutas descritas arriba.
 4. **Callbacks** recibidos por `RealtimePush` actualizan UI sin refrescar la página.
 
-> Este archivo actúa como un diagrama narrado: cada bloque muestra la ruta de ejecución principal y las clases involucradas en cada paso.
+
 

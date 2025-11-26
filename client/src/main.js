@@ -120,8 +120,10 @@ async function bootstrapIce() {
 
     const base = state.communicator.stringToProxy('ChatSession:ws -h localhost -p 10000');
     state.chatPrx = await Chat.ChatSessionPrx.checkedCast(base);
-    state.adapter = state.communicator.createObjectAdapter('');
-    await state.adapter.activate();
+    state.adapter = await state.communicator.createObjectAdapter('');
+    if (typeof state.adapter.activate === 'function') {
+        await state.adapter.activate();
+    }
     dom.statusChip.textContent = 'Ice listo';
 }
 
